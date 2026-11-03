@@ -2,11 +2,26 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { GROUPS } from "@/app/lib/groups";
 
 type Role = "ADMIN" | "ENSEIGNANT" | "ETUDIANT";
-type Student = { id: number; name: string; email: string; createdAt: string };
+type Student = {
+  id: number;
+  name: string;
+  email: string;
+  role: Role;
+  groupe: string | null;
+  createdAt: string;
+};
 
 const emptyForm = { name: "", email: "", password: "" };
+const emptyEdit = {
+  name: "",
+  email: "",
+  password: "",
+  role: "ETUDIANT" as Role,
+  groupe: "",
+};
 
 export default function StudentsPanel({ role }: { role: Role }) {
   const router = useRouter();
@@ -15,7 +30,7 @@ export default function StudentsPanel({ role }: { role: Role }) {
   const [error, setError] = useState<string | null>(null);
   const [createForm, setCreateForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState(emptyForm);
+  const [editForm, setEditForm] = useState(emptyEdit);
 
   // Ces booleens servent uniquement à l'UX : le serveur re-vérifie tout.
   const canCreate = role === "ADMIN";
@@ -75,15 +90,23 @@ export default function StudentsPanel({ role }: { role: Role }) {
 
   function startEdit(s: Student) {
     setEditingId(s.id);
-    setEditForm({ name: s.name, email: s.email, password: "" });
+    setEditForm({
+      name: s.name,
+      email: s.email,
+      password: "",
+      role: s.role,
+      groupe: s.groupe ?? "",
+    });
   }
 
   async function handleSave(id: number) {
     // L'enseignant n'envoie que le nom ; l'admin peut tout modifier.
-    const payload: Record<string, string> = { name: editForm.name };
+    const payload: Record<string, string | null> = { name: editForm.name };
     if (role === "ADMIN") {
       payload.email = editForm.email;
       if (editForm.password) payload.password = editForm.password;
+      payload.role = editForm.role;
+      payload.groupe = editForm.groupe || null;
     }
     try {
       setError(null);
@@ -147,6 +170,7 @@ export default function StudentsPanel({ role }: { role: Role }) {
               <tr>
                 <th className="p-2">Nom</th>
                 <th className="p-2">Email</th>
+                <th className="p-2">Groupe</th>
                 <th className="p-2">Inscrit le</th>
                 {(canEdit || canDelete) && <th className="p-2">Actions</th>}
               </tr>
@@ -168,11 +192,39 @@ export default function StudentsPanel({ role }: { role: Role }) {
                             <input className={input} type="password" placeholder="Nouveau mot de passe (optionnel)"
                               value={editForm.password}
                               onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} />
+                            <select
+                              className={input}
+                              aria-label="Rôle"
+                              value={editForm.role}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, role: e.target.value as Role })
+                              }
+                            >
+                              <option value="ETUDIANT">Étudiant</option>
+                              <option value="ENSEIGNANT">Enseignant</option>
+                              <option value="ADMIN">Administrateur</option>
+                            </select>
+                            <select
+                              className={input}
+                              aria-label="Groupe"
+                              value={editForm.groupe}
+                              onChange={(e) =>
+                                setEditForm({ ...editForm, groupe: e.target.value })
+                              }
+                            >
+                              <option value="">Sans groupe</option>
+                              {GROUPS.map((g) => (
+                                <option key={g} value={g}>
+                                  {g}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         ) : (
                           s.email
                         )}
                       </td>
+                      <td className="p-2">{s.groupe ?? "—"}</td>
                       <td className="p-2">{new Date(s.createdAt).toLocaleDateString("fr-FR")}</td>
                       <td className="flex gap-2 p-2">
                         <button className={btn} onClick={() => handleSave(s.id)}>Enregistrer</button>
@@ -183,6 +235,7 @@ export default function StudentsPanel({ role }: { role: Role }) {
                     <>
                       <td className="p-2">{s.name}</td>
                       <td className="p-2">{s.email}</td>
+                      <td className="p-2">{s.groupe ?? "—"}</td>
                       <td className="p-2">{new Date(s.createdAt).toLocaleDateString("fr-FR")}</td>
                       {(canEdit || canDelete) && (
                         <td className="flex gap-2 p-2">

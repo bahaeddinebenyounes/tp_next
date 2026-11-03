@@ -16,5 +16,6 @@ model User {
   name      String
   password  String
   role      String   @default("ETUDIANT")
+  groupe    String?
   createdAt DateTime @default(now())
 }

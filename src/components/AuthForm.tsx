@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
+import { GROUPS } from "@/app/lib/groups";
 import { useRouter } from "next/navigation";
+import { isValidGroup } from "@/app/lib/groups";
  
 export default function AuthForm(
   { mode }: { mode: "login" | "register" }
@@ -35,9 +37,20 @@ export default function AuthForm(
     <form onSubmit={onSubmit}
       className="flex max-w-sm flex-col gap-3">
       {mode === "register" && (
-        <input name="name" placeholder="Nom"
-          required className={cls} />
-      )}
+  <>
+    <input name="name" placeholder="Nom" required className={cls} />
+    <select name="groupe" required defaultValue="" className={cls}>
+      <option value="" disabled>
+        Choisir un groupe
+      </option>
+      {GROUPS.map((g) => (
+        <option key={g} value={g}>
+          {g}
+        </option>
+      ))}
+    </select>
+  </>
+)}
       <input name="email" type="email"
         placeholder="Email" required className={cls} />
       <input name="password" type="password"

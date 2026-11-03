@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/app/lib/prisma";
 import { requireRole } from "@/app/lib/auth";
+import { isValidGroup } from "@/app/lib/groups";
+
 import {
   updateStudentAdminSchema,
   updateStudentTeacherSchema,
@@ -13,7 +15,9 @@ import {
 } from "@/app/lib/students";
 
 type Ctx = { params: Promise<{ id: string }> };
-
+const ROLES = ["ADMIN", "ENSEIGNANT", "ETUDIANT"] as const;
+const isValidRole = (v: unknown): v is (typeof ROLES)[number] =>
+  typeof v === "string" && (ROLES as readonly string[]).includes(v);
 const badId = () =>
   NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
 const notFound = () =>
@@ -45,17 +49,44 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const id = parseId((await params).id);
   if (!id) return badId();
 
-  const body = await req.json().catch(() => null);
-  const schema =
-    auth.user.role === "ADMIN"
-      ? updateStudentAdminSchema
-      : updateStudentTeacherSchema;
-  const parsed = schema.safeParse(body);
+  const isAdmin = auth.user.role === "ADMIN";
+
+  const raw = (await req.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  const { role: rawRole, groupe: rawGroupe, ...rest } = raw ?? {};
+
+  // Only an admin may change role or groupe (server-side rule)
+  if (!isAdmin && (rawRole !== undefined || rawGroupe !== undefined)) {
+    return NextResponse.json({ error: "Accès interdit" }, { status: 403 });
+  }
+
+  // The schema only sees the fields it knows
+  const schema = isAdmin
+    ? updateStudentAdminSchema
+    : updateStudentTeacherSchema;
+  const parsed = schema.safeParse(raw ? rest : null);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0].message },
       { status: 400 }
     );
+  }
+
+  let role: (typeof ROLES)[number] | undefined;
+  let groupe: string | null | undefined;
+  if (rawRole !== undefined) {
+    if (!isValidRole(rawRole)) {
+      return NextResponse.json({ error: "Rôle invalide" }, { status: 400 });
+    }
+    role = rawRole;
+  }
+  if (rawGroupe !== undefined) {
+    if (rawGroupe !== null && !isValidGroup(rawGroupe)) {
+      return NextResponse.json({ error: "Groupe invalide" }, { status: 400 });
+    }
+    groupe = rawGroupe;
   }
 
   const target = await prisma.user.findFirst({
@@ -64,10 +95,16 @@ export async function PATCH(req: Request, { params }: Ctx) {
   });
   if (!target) return notFound();
 
-  const data: { name?: string; email?: string; password?: string } = {
-    ...parsed.data,
-  };
+  const data: {
+    name?: string;
+    email?: string;
+    password?: string;
+    role?: string;
+    groupe?: string | null;
+  } = { ...parsed.data };
   if (data.password) data.password = await bcrypt.hash(data.password, 10);
+  if (role !== undefined) data.role = role;
+  if (groupe !== undefined) data.groupe = groupe;
 
   try {
     const updated = await prisma.user.update({

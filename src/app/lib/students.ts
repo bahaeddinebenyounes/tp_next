@@ -4,6 +4,7 @@ export const publicStudentSelect = {
   name: true,
   email: true,
   role: true,
+  groupe: true, // NEW
   createdAt: true,
 } as const;
 
